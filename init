@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+[ -z "$PASSWD" ] && PASSWD="password"
+[ -z "$TTYD_PORT" ] && TTYD_PORT=7681
+
+echo "root:$PASSWD" | chpasswd
+
+if [ -z "$USER" ]; then
+    USER="root"
+    HOME="/root"
+else
+    HOME="/home/$USER"
+    getent passwd $USER > /dev/null || useradd -m -d "$HOME" -s /bin/bash -G root,sudo $USER
+    [ -f "/etc/sudoers.d/$USER" ] || echo "$USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USER && chmod 440 /etc/sudoers.d/$USER
+    echo "$USER:$PASSWD" | chpasswd
+fi
+
+umask 002
+
+chmod g+w /home
+
+[ -d "/home/supervisord" ] || mkdir /home/supervisord
+
+cat > /home/supervisord/ttyd.conf << EOF
+[program:ttyd]
+command=/usr/bin/ttyd -p $TTYD_PORT -t enableTrzsz=true -c $USER:$PASSWD -W bash
+environment=HOME="$HOME",USER="$USER",LOGNAME="$USER"
+directory=$HOME
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/tmp/ttyd.log
+stdout_logfile_maxbytes=3MB
+stdout_logfile_backups=2
+user=$USER
+EOF
+
+exec "$@"
